@@ -228,13 +228,14 @@ class Attention(nn.Module):
         # q, k, v with shape (B * nHead, H * W, C)
         q, k, v = qkv.reshape(3, B * self.num_heads, H * W, -1).unbind(0)
 
-        attn = (q * self.scale) @ k.transpose(-2, -1)
-
+        attn_mask = None
         if self.use_rel_pos:
-            attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
+            dummy_attn = torch.zeros(q.shape[0], q.shape[1], q.shape[1], device=q.device, dtype=q.dtype)
+            attn_mask = add_decomposed_rel_pos(dummy_attn, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
 
-        attn = attn.softmax(dim=-1)
-        x = (attn @ v).view(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+        x = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, scale=self.scale)
+
+        x = x.view(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         x = self.proj(x)
 
         return x
