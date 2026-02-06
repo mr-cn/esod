@@ -219,6 +219,8 @@ def prepare_visdrone():
 
         data_paths = []
         for image_path in tqdm(images):
+            if image_path.endswith("_masked.jpg"):
+                continue
             image = cv2.imread(image_path)
             height, width, _ = image.shape
             label_path = image_path.replace('images', 'annotations').replace('.jpg', '.txt')
