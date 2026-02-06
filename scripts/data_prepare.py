@@ -26,6 +26,10 @@ try:
     device = "cuda"
 
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device) #.half()  Warning: Precision Drops
+
+    print("Compiling Image Encoder...")
+    sam.image_encoder = torch.compile(sam.image_encoder, mode="max-autotune")
+
     dtype = next(sam.named_parameters())[1].dtype
     predictor = SamPredictor(sam)
 except:
@@ -109,15 +113,30 @@ def segment_image(image, labels, width, height):
 
     predictor.set_image(image)
     transformed_boxes = predictor.transform.apply_boxes_torch(input_boxes, image.shape[:2]).to(dtype)
+
+    batch_size = 64
+    num_boxes = transformed_boxes.shape[0]
+    masks_list = []
     
     with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-        masks, _, _ = predictor.predict_torch(
-            point_coords=None,
-            point_labels=None,
-            boxes=transformed_boxes,
-            multimask_output=False,
-            return_logits=True
-        )
+        for i in range(0, num_boxes, batch_size):
+            end = min(i + batch_size, num_boxes)
+            batch_boxes = transformed_boxes[i:end]
+
+            batch_masks, _, _ = predictor.predict_torch(
+                point_coords=None,
+                point_labels=None,
+                boxes=batch_boxes,
+                multimask_output=False,
+                return_logits=True
+            )
+            masks_list.append(batch_masks)
+
+    if len(masks_list) > 0:
+        masks = torch.cat(masks_list, dim=0)
+    else:
+        masks = torch.zeros((0, 1, image.shape[0], image.shape[1]), device=device, dtype=dtype)
+
     # (batch_size) x (num_predicted_masks_per_input=1) x H x W
     mask = masks.sigmoid().squeeze(1).max(dim=0)[0].half()
     
