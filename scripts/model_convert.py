@@ -418,7 +418,7 @@ def convert_gpvit():
     # # model_dict = backbone.state_dict()
     # # for i, (k, v) in enumerate(model_dict.items()):
     # #     print(i, k, v.shape)
-    state_dict = torch.load(ckpt_path)['state_dict']
+    state_dict = torch.load(ckpt_path, weights_only=False)['state_dict']
     # for i, (k, v) in enumerate(state_dict.items()):
     #     print(i, k, v.shape)
     # backbone.load_state_dict(
